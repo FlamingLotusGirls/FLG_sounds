@@ -97,15 +97,6 @@ def play_sound(filename, speed=1.0, vol=1.0, block=False):
 
 def readIR(analog_pin):
     return serial_reader.get_pin_value(analog_pin)
-    num_samples = 8
-    sample = None
-    while True:
-        samples = []
-        while len(samples) < num_samples:
-           sample = serial_reader.get_pin_value(analog_pin)
-           if sample:
-               samples.append(sample)
-        return median(samples)
 
 def gen_breathing_sounds():
     while True:
