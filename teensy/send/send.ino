@@ -1,4 +1,4 @@
-// vim:set ft=c: HardwareSerial uart = HardwareSerial();
+// vim: set ft=c:
 HardwareSerial uart = HardwareSerial();
 const int LED_PIN = 11;
 const int NUM_PINS = 5;
