@@ -3,7 +3,6 @@
 import time, os, sys
 import glob
 import subprocess
-#from pyfirmata import Arduino, util
 import itertools
 import random
 import threading
@@ -236,8 +235,6 @@ class FeltSensor(object):
 
 if __name__ == '__main__':
 
-    # Setup pyfirmata for arduino reads
-    acm_no = 0
 
     breathing_sounds = gen_breathing_sounds()
 
