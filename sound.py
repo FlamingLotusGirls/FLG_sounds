@@ -16,19 +16,20 @@ SOUND_ROOT = '/home/pi/FLG_sounds'
 INHALE_SOUNDS = glob.glob( os.path.join(SOUND_ROOT, 'normalized/inhale_[0-9]*.wav' ) )
 EXHALE_SOUNDS = glob.glob( os.path.join(SOUND_ROOT, 'normalized/exhale_[0-9]*.wav' ) )
 MIN_BREATH_SPEED = 0.6
-MAX_BREATH_SPEED = 2.5
+#MAX_BREATH_SPEED = 2.5
+MAX_BREATH_SPEED = 1.8
 GROWTH_LIMIT=0.0003
 GROWTH_INCREMENT = 5
-DECAY_RATE=1.0
+DECAY_INTERVAL=0.5 # seconds
 
 SERIAL_PORT_PATTERN = '/dev/ttyAMA*'
 RING_BUFFER_SIZE = 8
 
-IR_PINS = [0]
+IR_PINS = [0,1,2,3]
 #IR_EVENT_THRESHOLD = 0.05
-IR_EVENT_THRESHOLD = 1
+IR_EVENT_THRESHOLD = 100 
 
-FELT_PINS = [5]
+FELT_PINS = [4]
 
 
 class SerialReader(threading.Thread):
@@ -97,14 +98,23 @@ def play_sound(filename, speed=1.0, vol=1.0, block=False):
 
 def readIR(analog_pin):
     return serial_reader.get_pin_value(analog_pin)
+    num_samples = 8
+    sample = None
+    while True:
+        samples = []
+        while len(samples) < num_samples:
+           sample = serial_reader.get_pin_value(analog_pin)
+           if sample:
+               samples.append(sample)
+        return median(samples)
 
 def gen_breathing_sounds():
     while True:
-        yield random.choice(INHALE_SOUNDS)
-        yield random.choice(EXHALE_SOUNDS)
+        yield random.choice(INHALE_SOUNDS)   
+        yield random.choice(EXHALE_SOUNDS)   
 
 
-breathspeed = 0.8
+breathspeed = 0.8 
 class Breather(threading.Thread):
     def __init__(self, *args, **kwargs):
         super(Breather, self).__init__(*args, **kwargs)
@@ -121,7 +131,7 @@ class Breather(threading.Thread):
         while True:
             while not self.queue.empty():
                 self.speed = self.queue.get()
-            #print "Breathing speed: %f" % self.speed
+            print "Breathing speed: %f" % self.speed
             play_sound(breathing_sounds.next(), speed=self.speed, block=True)
 
     @classmethod
@@ -135,7 +145,7 @@ class Looper(threading.Thread):
         self.speed = speed
         self.vol = vol
         self.soundfile = soundfile
-
+        
 
     def run(self):
         while True:
@@ -143,18 +153,18 @@ class Looper(threading.Thread):
             time.sleep(0.10)
 
 class ActivityCounter(object):
-    def __init__(self, max_value=60, growth_limit=GROWTH_LIMIT, decay_rate=DECAY_RATE):
+    def __init__(self, max_value=60, growth_limit=GROWTH_LIMIT, decay_interval=DECAY_INTERVAL):
         self.value = 0
         self.max_value = max_value
 
-        self.decay_rate = decay_rate # in seconds
+        self.decay_interval = decay_interval # in seconds
         self.growth_limit = growth_limit # in seconds
 
         self.last_decay_time = time.time()
         self.last_grow_time = time.time()
 
     def update(self):
-        if time.time() - self.last_decay_time > self.decay_rate:
+        if time.time() - self.last_decay_time > self.decay_interval:
             if self.value > 0:
                 self.value -= 1
             self.last_decay_time = time.time()
@@ -192,9 +202,9 @@ class IRSensor(object):
         if newvalue:
             self.value = newvalue
         delta = self.value - self.prior_value
-        print "IR %d delta: %d" % (self.pin, self.value - self.prior_value)
         if delta > IR_EVENT_THRESHOLD:
-            self.counter += GROWTH_INCREMENT
+            print "IR %d delta: %d" % (self.pin, self.value - self.prior_value)
+            self.counter += GROWTH_INCREMENT 
             print "Counter ++"
 
 class FeltSensor(object):
@@ -210,18 +220,20 @@ class FeltSensor(object):
     def update(self):
         self.last_value = self.value
         r = readIR(self.pin)
+        #print "felt value: ", r
         if r:
-            self.value = {True: 1, False:0}[r >= 50]
+            self.value = {True: 1, False:0}[r >= 500]
             #print "Felt %d: %F" % (self.pin, self.value)
-            pitch = self.scale(r , 5,1023 , 2.5,0.6)
+            pitch = self.scale(r , 50,1023 , 2.5,0.6)
             # sensor range: min => 1023
             # pitch range:  2.5 => 0.6
             if self.last_value == 0 and self.value == 1:
+                print "Felt trigger"
                 self.trigger_sound(pitch)
 
     def trigger_sound(self, pitch):
         soundfile = random.choice(self.sounds)
-        play_sound(soundfile, speed = pitch, vol="5dB")
+        play_sound(soundfile, speed = pitch, vol="9dB")
 
 
 
@@ -240,11 +252,11 @@ if __name__ == '__main__':
 
     scraper = Looper('normalized/scrapes_loop.wav', vol='-3dB')
     scraper.start()
-
+    
     counter = ActivityCounter()
     ir_sensors = [ IRSensor(pin, counter) for pin in IR_PINS  ]
     felt_sensors = [ FeltSensor(pin) for pin in FELT_PINS ]
-
+    
     speed = 0.8
     while True:
         for irs in ir_sensors:
@@ -255,5 +267,5 @@ if __name__ == '__main__':
 
         for felt in felt_sensors:
             felt.update()
-
+        
         time.sleep(0.10)
